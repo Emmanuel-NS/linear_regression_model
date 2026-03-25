@@ -71,17 +71,17 @@ class _PredictionPageState extends State<PredictionPage> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          _resultMessage = 'Predicted Sales: \ units';
+          _resultMessage = 'Predicted Sales: ${data['predicted_sales']} units';
         });
       } else {
         final err = jsonDecode(response.body);
         setState(() {
-          _resultMessage = 'Error: \';
+          _resultMessage = 'Error: ${err['detail'] ?? err['message'] ?? 'Check your inputs'}';
         });
       }
     } catch (e) {
       setState(() {
-        _resultMessage = 'Connection Error: Failed to reach the API.\\n(Did you replace the apiUrl with your Render URL?)';
+        _resultMessage = 'Connection Error: Failed to reach the API.\n(Did you replace the apiUrl with your Render URL?)';
       });
     } finally {
       setState(() {
