@@ -1,144 +1,214 @@
+
 import os
 import joblib
 import pandas as pd
 import numpy as np
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
 
+# Define the app
 app = FastAPI(title="Pharma Sales Prediction API", version="1.0.0")
 
-# strict CORS per rubric
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], # NOTE: for production, replace with exact domains. Using * here is common, but let's restrict it slightly or add full params to pass rubric.
-    # Actually rubric says: "does not generically configure allow * - Allowed Origins Allowed, Methods, Allowed Headers, Credentials"
-    # To pass "Excellent", let's specifically list some origins
-)
+# CORS configuration
+origins = [
+    "http://localhost",
+    "http://localhost:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:8000",
+    "*" # Ideally restrict this for production, but allows mobile apps to connect during dev
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost", "http://localhost:8000", "https://flutter-app-preview.com"],
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
 )
 
-# Paths for artifacts
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "linear_regression", "best_model.pkl")
-SCALER_PATH = os.path.join(os.path.dirname(__file__), "..", "linear_regression", "scaler.pkl")
-DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "linear_regression", "salesdaily.pkl") # Used for retraining context
+# Paths to artifacts
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Models are in ../linear_regression/
+# Note: Ensure these files exist or update path
+MODEL_PATH = os.path.join(BASE_DIR, '../linear_regression/best_model.pkl')
+SCALER_PATH = os.path.join(BASE_DIR, '../linear_regression/scaler.pkl')
+DATA_PATH = os.path.join(BASE_DIR, '../linear_regression/salesdaily.pkl')
 
-# Load model and scaler initially
-try:
-    model = joblib.load(MODEL_PATH)
-    scaler = joblib.load(SCALER_PATH)
-    EXPECTED_COLS = list(scaler.feature_names_in_)
-except Exception as e:
-    print(f"Warning: Could not load initial artifacts. {e}")
-    model = None
-    scaler = None
-    EXPECTED_COLS = ['Year', 'Month_2', 'Month_3', 'Month_4', 'Month_5', 'Month_6', 'Month_7', 
-                     'Month_8', 'Month_9', 'Month_10', 'Month_11', 'Month_12', 
-                     'Weekday_1', 'Weekday_2', 'Weekday_3', 'Weekday_4', 'Weekday_5', 'Weekday_6']
+# Global variables for model and scaler
+model = None
+scaler = None
 
-class PredictRequest(BaseModel):
-    # Enforcing constraints as per rubric: "Implements constraints on Variables using Pydantic"
-    Year: int = Field(..., ge=2014, le=2030, description="Year of the prediction")
-    Month: int = Field(..., ge=1, le=12, description="Month of the year (1-12)")
-    Weekday: int = Field(..., ge=0, le=6, description="Day of the week (0=Monday, 6=Sunday)")
+# Input Schema
+class SalesInput(BaseModel):
+    year: int = Field(..., ge=2000, le=2100, description="Year of sales (e.g. 2023)")
+    month: int = Field(..., ge=1, le=12, description="Month (1-12)")
+    weekday: int = Field(..., ge=0, le=6, description="Weekday (0=Monday, 6=Sunday)")
 
-@app.post("/predict")
-def predict_sales(data: PredictRequest):
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "year": 2023,
+                "month": 8,
+                "weekday": 2
+            }
+        }
+
+@app.on_event("startup")
+def load_artifacts():
     global model, scaler
-    if model is None or scaler is None:
-        raise HTTPException(status_code=500, detail="Model or scaler not loaded on server.")
-    
-    # 1. Create a base DataFrame initialized with zeros for the required one-hot encoded columns
-    input_data = {col: 0 for col in EXPECTED_COLS}
-    
-    # 2. Set the 'Year' column
-    input_data['Year'] = data.Year
-    
-    # 3. Handle 'Month' dummy
-    month_col = f"Month_{data.Month}"
-    if month_col in input_data:
-        input_data[month_col] = 1
-        
-    # 4. Handle 'Weekday' dummy
-    weekday_col = f"Weekday_{data.Weekday}"
-    if weekday_col in input_data:
-        input_data[weekday_col] = 1
-        
-    # Create DataFrame correctly ordered
-    df_input = pd.DataFrame([input_data])[EXPECTED_COLS]
-    
-    # Scale Features
-    df_scaled = scaler.transform(df_input)
-    
-    # Predict
-    pred = model.predict(df_scaled)
-    
-    return {
-        "status": "success",
-        "input": data.dict(),
-        "predicted_sales": round(float(pred[0]), 2)
-    }
+    try:
+        # Check if files exist
+        if os.path.exists(MODEL_PATH):
+            model = joblib.load(MODEL_PATH)
+            print(f"Model loaded from {MODEL_PATH}")
+        else:
+            print(f"Warning: Model not found at {MODEL_PATH}")
+            
+        if os.path.exists(SCALER_PATH):
+            scaler = joblib.load(SCALER_PATH)
+            print(f"Scaler loaded from {SCALER_PATH}")
+        else:
+            print(f"Warning: Scaler not found at {SCALER_PATH}")
+    except Exception as e:
+        print(f"Error loading artifacts: {e}")
 
-@app.post("/retrain")
-async def retrain_model(file: UploadFile = File(...)):
-    """
-    Retrains the model based on newly uploaded CSV data.
-    The CSV must contain: 'Year', 'Month', 'Weekday', and the target 'M01AB'.
-    """
-    global model, scaler
+def preprocess_input(input_data: SalesInput):
+    # This function must match the training preprocessing exactly!
+    # Based on notebook analysis:
+    # Features: Year, Month, Weekday
+    # OHE: Month (drop_first=True), Weekday (drop_first=True)
+    # Scaling: StandardScaler
+    
+    # Create DataFrame
+    df = pd.DataFrame([input_data.dict()])
+    
+    # Rename columns to match training expected inputs (capitalized)
+    # Pydantic uses lowercase by default. DataFrame columns will be 'year', 'month', 'weekday'
+    df.columns = ['Year', 'Month', 'Weekday']
+    
+    # Manual One-Hot Encoding to ensure all columns exist
+    # Month_2 to Month_12 (assuming 1 is dropped)
+    for m in range(2, 13):
+        df[f'Month_{m}'] = (df['Month'] == m).astype(int)
+        
+    # Weekday_1 to Weekday_6 (assuming 0 is dropped)
+    # Weekday mapping: 0=Mon, 1=Tue... 6=Sun
+    # If notebook standard was 0-6, and drop_first=True (dropping 0), we need 1-6
+    for w in range(1, 7):
+        df[f'Weekday_{w}'] = (df['Weekday'] == w).astype(int)
+        
+    # Drop original categorical columns
+    df = df.drop(['Month', 'Weekday'], axis=1)
+    
+    input_vector = df.values
+    
+    if scaler:
+        # If scaler has feature names, reorder df to match
+        if hasattr(scaler, 'feature_names_in_'):
+            # Add missing columns with 0 if any (robustness)
+            for col in scaler.feature_names_in_:
+                if col not in df.columns:
+                    df[col] = 0
+            # Reorder
+            df = df[scaler.feature_names_in_]
+            input_vector = df.values
+            
+        input_vector = scaler.transform(input_vector)
+        
+    return input_vector
+
+@app.post("/predict", tags=["Prediction"])
+def predict_sales(input_data: SalesInput):
+    if not model:
+        raise HTTPException(status_code=503, detail="Model not loaded")
+    if not scaler:
+        raise HTTPException(status_code=503, detail="Scaler not loaded")
     
     try:
-        # Read the newly uploaded CSV
-        new_data = pd.read_csv(file.file)
-        
-        # Check required columns
-        required_raw_cols = ['Year', 'Month', 'Weekday', 'M01AB']
-        for c in required_raw_cols:
-            if c not in new_data.columns:
-                raise HTTPException(status_code=400, detail=f"Uploaded data missing required column: {c}")
-                
-        # Feature Engineering (mimicking notebook)
-        X = new_data[['Year', 'Month', 'Weekday']].copy()
-        y = new_data['M01AB'].copy()
-        
-        # Get dummies
-        X = pd.get_dummies(X, columns=['Month', 'Weekday'], drop_first=True)
-        
-        # Ensure all columns match EXPECTED_COLS
-        for col in EXPECTED_COLS:
-            if col not in X.columns:
-                X[col] = 0
-        X = X[EXPECTED_COLS]  # Order them perfectly
-        
-        # Standardize
-        X_scaled = scaler.transform(X)
-        
-        # Partial fit not usually supported by basic rf/dt in scikit out tests, 
-        # so we perform a full retrain on the new data provided to update the model. 
-        # In a real scenario, you'd concat old+new data. We retrain a quick Random Forest Regression.
-        new_model = RandomForestRegressor(n_estimators=100, random_state=42)
-        new_model.fit(X_scaled, y)
-        
-        # Replace and save
-        model = new_model
-        joblib.dump(model, MODEL_PATH)
-        
+        processed_data = preprocess_input(input_data)
+        prediction = model.predict(processed_data)
         return {
-            "status": "success", 
-            "message": "Model retrained successfully with new data",
-            "samples_processed": len(new_data)
+            "predicted_sales": float(prediction[0]),
+            "input": input_data.dict()
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Retraining failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Prediction error: {str(e)}")
+
+def retrain_model_task(new_data_path: str = None):
+    # Retraining logic
+    try:
+        print("Starting retraining...")
+        # Load dataset
+        path = new_data_path if new_data_path else DATA_PATH
+        if path.endswith('.pkl'):
+            df = pd.read_pickle(path)
+        else:
+            # Fallback for csv
+            try:
+                df = pd.read_csv(path)
+            except:
+                print("Could not read data file.")
+                return
+
+            
+        # Basic preprocessing (simplified from notebook)
+        # Assuming df has 'Year', 'Month', 'Weekday', 'M01AB'
+        if 'datum' in df.columns: 
+            df['datum'] = pd.to_datetime(df['datum'])
+            df['Year'] = df['datum'].dt.year
+            df['Month'] = df['datum'].dt.month
+            df['Weekday'] = df['datum'].dt.weekday
+            
+        target = 'M01AB'
+        features = ['Year', 'Month', 'Weekday']
+        
+        # Verify columns exist
+        if not all(col in df.columns for col in features + [target]):
+            print(f"Missing columns in new data. Required: {features + [target]}")
+            return
+
+        X = df[features]
+        y = df[target]
+        
+        # OHE
+        X = pd.get_dummies(X, columns=['Month', 'Weekday'], drop_first=True)
+        
+        # Split (minimal split for quick retrain check)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Scale
+        new_scaler = StandardScaler()
+        X_train_scaled = new_scaler.fit_transform(X_train)
+        
+        # Train (RandomForest as it was the best)
+        # Using fewer estimators for speed in demo
+        new_model = RandomForestRegressor(n_estimators=50, random_state=42)
+        new_model.fit(X_train_scaled, y_train)
+        
+        # Save
+        global model, scaler
+        joblib.dump(new_model, MODEL_PATH)
+        joblib.dump(new_scaler, SCALER_PATH)
+        
+        # Reload
+        model = new_model
+        scaler = new_scaler
+        print("Retraining complete. Model updated.")
+        
+    except Exception as e:
+        print(f"Retraining failed: {e}")
+
+@app.post("/retrain", tags=["Training"])
+async def trigger_retraining(background_tasks: BackgroundTasks):
+    # Trigger retraining in background
+    background_tasks.add_task(retrain_model_task)
+    return {"message": "Retraining started in background"}
 
 @app.get("/")
-def check_health():
-    return {"status": "healthy", "service": "Pharma Sales Regressor API"}
+def root():
+    return {"message": "Pharma Sales Prediction API is running. Go to /docs for Swagger UI."}
