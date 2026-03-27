@@ -36,6 +36,4 @@ flutter run
 ```
 
 ## Video Demo
-Add your final demo link here:
-
 - YouTube: https://youtu.be/NelnlThafII
