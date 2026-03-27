@@ -20,7 +20,8 @@ origins = [
     "http://localhost:8000",
     "http://localhost:3000",
     "http://127.0.0.1:8000",
-    "*" # Ideally restrict this for production, but allows mobile apps to connect during dev
+    "http://127.0.0.1:3000",
+    "https://linear-regression-model-q2c6.onrender.com",
 ]
 
 app.add_middleware(
@@ -28,13 +29,11 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Accept", "Authorization", "Content-Type", "Origin", "X-Requested-With"],
 )
 
 # Paths to artifacts
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Models are in ../linear_regression/
-# Note: Ensure these files exist or update path
 MODEL_PATH = os.path.join(BASE_DIR, '../linear_regression/best_model.pkl')
 SCALER_PATH = os.path.join(BASE_DIR, '../linear_regression/scaler.pkl')
 DATA_PATH = os.path.join(BASE_DIR, '../linear_regression/salesdaily.pkl')
@@ -78,16 +77,10 @@ def load_artifacts():
         print(f"Error loading artifacts: {e}")
 
 def preprocess_input(input_data: SalesInput):
-    # This function must match the training preprocessing exactly!
-    # Based on notebook analysis:
-    # Features: Year, Month, Weekday
-    # OHE: Month (drop_first=True), Weekday (drop_first=True)
-    # Scaling: StandardScaler
     
     # Create DataFrame
     df = pd.DataFrame([input_data.dict()])
     
-    # Rename columns to match training expected inputs (capitalized)
     # Pydantic uses lowercase by default. DataFrame columns will be 'year', 'month', 'weekday'
     df.columns = ['Year', 'Month', 'Weekday']
     
