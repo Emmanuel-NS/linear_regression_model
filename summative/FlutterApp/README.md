@@ -1,16 +1,23 @@
-# pharma_sales_predictor
+# Pharma Sales Predictor App
 
-A new Flutter project.
+Flutter mobile client for the Pharma Sales Prediction project.
 
-## Getting Started
+## What This App Does
+- Takes user inputs: `Year`, `Month`, and `Weekday`.
+- Calls the deployed FastAPI prediction endpoint.
+- Displays predicted M01AB demand (rounded and exact value).
 
-This project is a starting point for a Flutter application.
+## API Endpoint
+- Base URL: `https://linear-regression-model-q2c6.onrender.com`
+- Swagger (manual testing): `https://linear-regression-model-q2c6.onrender.com/docs`
 
-A few resources to get you started if this is your first Flutter project:
+## Run Locally
+```bash
+flutter pub get
+flutter run
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Build Release
+```bash
+flutter build apk --release
+```

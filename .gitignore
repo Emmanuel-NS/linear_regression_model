@@ -1,0 +1,11 @@
+# Temporary scripts
+update_readme.py
+
+# Optional long-form notes not required for submission
+summative/linear_regression/CODE_EXPLANATION.md
+
+# Notebook runtime artifacts
+**/.ipynb_checkpoints/
+
+# Trained artifacts and local data caches
+summative/linear_regression/*.pkl

@@ -1,32 +1,41 @@
 # Pharma Sales Prediction (M01AB)
 
-## Mission & Problem
-**Mission:** Optimize pharmaceutical inventory by predicting daily sales volume of Anti-inflammatory drugs (M01AB) using Multivariate Linear Regression.
-**Problem:** Pharmacies face stockouts and overstock due to irregular demand patterns driven by seasonality and specific days of the week, leading to financial loss and poor patient service.
+## Mission And Problem
+Mission: optimize pharmaceutical inventory by predicting daily M01AB sales.
+
+Problem: pharmacies face stockouts and overstock due to seasonal and weekday demand variation. This project predicts expected demand to support better replenishment planning.
 
 ## Dataset
-**Source:** [Pharma Sales Data (Kaggle)](https://www.kaggle.com/datasets/milanzdravkovic/pharma-sales-data)
-**Description:** The dataset contains 6 years of sales data. We utilized the `salesdaily.csv` file, specifically the `M01AB` column (Anti-inflammatory and Antirheumatic non-steroids), analyzing 2,106 daily records to engineer temporal features (Year, Month, Weekday).
+Source: [Pharma Sales Data (Kaggle)](https://www.kaggle.com/datasets/milanzdravkovic/pharma-sales-data)
 
-## API Deployment
-The regression model is deployed using FastAPI on Render.
-- **Base URL:** https://linear-regression-model-q2c6.onrender.com
-- **Swagger UI (Test Prediction):** https://linear-regression-model-q2c6.onrender.com/docs
+Used file: `salesdaily.csv`.
+
+Target: `M01AB` (anti-inflammatory and antirheumatic non-steroids).
+
+Feature set used for prediction: `Year`, `Month`, `Weekday`.
+
+## Deployed API
+FastAPI deployment on Render:
+
+- Base URL: https://linear-regression-model-q2c6.onrender.com
+- Swagger UI: https://linear-regression-model-q2c6.onrender.com/docs
+
+## Repository Structure
+- `summative/API/` - FastAPI backend and model-serving endpoint.
+- `summative/FlutterApp/` - Flutter mobile app client.
+- `summative/linear_regression/` - training notebook and model assets.
+
+## Run The Mobile App
+1. Install Flutter SDK and connect a device/emulator.
+2. Open terminal and run:
+
+```bash
+cd summative/FlutterApp
+flutter pub get
+flutter run
+```
 
 ## Video Demo
-[Insert YouTube Video Link Here]
+Add your final demo link here:
 
-## How to Run the Mobile App
-1. **Prerequisites:** Ensure Flutter SDK is installed and a device/emulator is connected.
-2. **Navigate:** Open a terminal and move to the app directory:
-   ```bash
-   cd summative/FlutterApp
-   ```
-3. **Install Dependencies:**
-   ```bash
-   flutter pub get
-   ```
-4. **Run App:**
-   ```bash
-   flutter run
-   ```
+- YouTube: [Insert Link]
